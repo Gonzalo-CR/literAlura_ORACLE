@@ -33,13 +33,4 @@ WHERE LOWER(a.nombre) LIKE LOWER(CONCAT('%', :nombre, '%'))
 
     @Query("SELECT a FROM Autor a WHERE LOWER(a.nombre) LIKE LOWER(CONCAT('%', :palabra, '%'))")
     Optional<Autor> findByNombreContainingIgnoreCase(String palabra);
-
-//    @Query("""
-//    SELECT a FROM Autor a
-//    LEFT JOIN FETCH a.bibliografias b
-//    LEFT JOIN FETCH b.libro
-//    WHERE a.fechaDeNacimiento <= :ano AND (a.fechaDeFallecimiento IS NULL OR a.fechaDeFallecimiento >= :ano)
-//""")
-//    List<Autor> findAutoresVivosEnAnoWithLibros(int ano);
-
 }

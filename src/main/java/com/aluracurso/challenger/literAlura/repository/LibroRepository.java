@@ -9,14 +9,6 @@ import java.util.Optional;
 
 public interface LibroRepository extends JpaRepository<Libro, Long> {
 
-//    @Query("""
-//        SELECT l FROM Libro l
-//        JOIN FETCH l.bibliografias b
-//        JOIN FETCH b.autor
-//        WHERE LOWER(l.titulo) LIKE LOWER(CONCAT('%', :palabra, '%'))
-//    """)
-//    Optional<Libro> findByTituloContainingIgnoreCaseWithAutores(String palabra);
-
     // Método para buscar libros por título (ignorando mayúsculas y minúsculas)
     Optional<Libro> findFirstByTituloContainingIgnoreCase(String palabra);
 
