@@ -3,7 +3,6 @@ package com.aluracurso.challenger.literAlura.principal;
 import com.aluracurso.challenger.literAlura.model.Autor;
 import com.aluracurso.challenger.literAlura.model.Datos;
 import com.aluracurso.challenger.literAlura.model.DatosLibros;
-import com.aluracurso.challenger.literAlura.model.DatosAutor;
 import com.aluracurso.challenger.literAlura.model.Libro;
 import com.aluracurso.challenger.literAlura.repository.LibroRepository;
 import com.aluracurso.challenger.literAlura.repository.AutorRepository;
@@ -115,7 +114,6 @@ public class Principal {
         }
     }
 
-
     private void registrarLibroDesdeAPI(DatosLibros datosLibro) {
         Libro nuevoLibro = new Libro(datosLibro);
         List<Autor> autores = datosLibro.autor().stream()
@@ -202,7 +200,7 @@ public class Principal {
 
     private void mostrarDatosAutor(Autor autor) {
         Hibernate.initialize(autor.getBibliografias());
-        System.out.println("\nAutor encontrado:");
+        System.out.println("\n****** Autor encontrado ******");
         System.out.println("Nombre: " + autor.getNombre());
         System.out.println("Fecha de Nacimiento: " + autor.getFechaDeNacimiento());
         System.out.println("Fecha de Fallecimiento: " + autor.getFechaDeFallecimiento());

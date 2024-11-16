@@ -9,22 +9,8 @@ import java.util.Optional;
 
 public interface LibroRepository extends JpaRepository<Libro, Long> {
 
-//    // Buscar el primer libro que coincida exactamente con el título, ignorando mayúsculas/minúsculas
-//    Optional<Libro> findFirstByTituloIgnoreCase(String titulo);
-//
-//    // Método para buscar libros por título (ignorando mayúsculas y minúsculas)
-//    Optional<Libro> findFirstByTituloContainingIgnoreCase(String palabra);
-//
-//    // Método para buscar libros que contengan una palabra completa en el título, ignorando mayúsculas y minúsculas
-//    @Query(value = "SELECT * FROM libro WHERE LOWER(titulo) REGEXP CONCAT('(^|\\s)', LOWER(:palabra), '(\\s|$)')", nativeQuery = true)
-//    List<Libro> findLibrosPorPalabraCompletaEnTitulo(String palabra);
-
-
-
     @Query("SELECT l FROM Libro l WHERE LOWER(l.titulo) LIKE LOWER(CONCAT('%', :palabra, '%'))")
     List<Libro> findLibrosCandidatosPorTitulo(String palabra);
-
-
 
     //*********************************
 
