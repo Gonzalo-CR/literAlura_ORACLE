@@ -10,7 +10,6 @@ import com.aluracurso.challenger.literAlura.repository.AutorRepository;
 import com.aluracurso.challenger.literAlura.service.ConsumoAPI;
 import com.aluracurso.challenger.literAlura.service.ConvierteDatos;
 import jakarta.transaction.Transactional;
-import org.antlr.v4.runtime.InputMismatchException;
 import org.hibernate.Hibernate;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -42,63 +41,146 @@ public class Principal {
         var opcion = -1;
         while (opcion != 0) {
             var menu = """
-             \n   **LiterAlura**
-            Elija una opción:
-            1 - Buscar libro por título (registra la búsqueda) 
-            2 - Buscar Autores
-            3 - Buscar libros por autor y año
-            4 - Buscar libros por idioma disponible
-            5 - Ver todos los libros disponibles
-            6 - Ver Top 10 de libros más descargados
-            0 - Salir
-            """;
+                 \n   **LiterAlura**
+                Elija una opción:
+                1 - Buscar libro por título (registra la búsqueda)
+                2 - Buscar Autores
+                3 - Buscar libros por autor y año
+                4 - Buscar libros por idioma disponible
+                5 - Ver todos los libros disponibles
+                6 - Ver Top 10 de libros más descargados
+                0 - Salir
+                """;
             System.out.println(menu);
 
             try {
-                boolean validOption = false;
-                while (!validOption) {
-                    if (teclado.hasNextInt()) {
-                        opcion = teclado.nextInt();
-                        teclado.nextLine(); // Limpiar el buffer de entrada
-                        validOption = true;
-                    } else {
-                        System.out.println("Entrada no válida, por favor ingresa un número entero.");
-                        teclado.nextLine(); // Limpiar el buffer
-                    }
-                }
+                if (teclado.hasNextInt()) {
+                    opcion = teclado.nextInt();
+                    teclado.nextLine(); // Limpiar el buffer de entrada
 
-                switch (opcion) {
-                    case 1:
-                        buscarLibro();
-                        break;
-                    case 2:
-                        buscarAutoresRegistrados();
-                        break;
-                    case 3:
-                        buscarLibroPorAutorYFecha();
-                        break;
-                    case 4:
-                        buscarLibroPorIdioma();
-                        break;
-                    case 5:
-                        listarLibrosDisponibles();
-                        break;
-                    case 6:
-                        mostrarTopLibros();
-                        break;
-                    case 0:
-                        System.out.println("Cerrando la aplicación...");
-                        teclado.close(); // Cierra el Scanner
-                        System.exit(0);  // Finaliza el programa
-                        break;
-                    default:
-                        System.out.println("Opción inválida");
+                    switch (opcion) {
+                        case 1 -> buscarLibro();
+                        case 2 -> buscarAutoresRegistrados();
+                        case 3 -> buscarLibroPorAutorYFecha();
+                        case 4 -> buscarLibroPorIdioma();
+                        case 5 -> listarLibrosDisponibles();
+                        case 6 -> mostrarTopLibros();
+                        case 0 -> {
+                            System.out.println("Cerrando la aplicación...");
+                            teclado.close(); // Cierra el Scanner
+                            System.exit(0);  // Finaliza el programa
+                        }
+                        default -> System.out.println("Opción inválida.");
+                    }
+                } else {
+                    System.out.println("Entrada no válida, por favor ingresa un número entero.");
+                    teclado.nextLine(); // Limpiar el buffer
                 }
-            } catch (InputMismatchException e) {
-                System.out.println("Entrada no válida, por favor ingresa un número entero.");
-                teclado.nextLine(); // Limpiar el buffer para la próxima entrada
+            } catch (Exception e) {
+                System.out.println("Error inesperado: " + e.getMessage());
             }
         }
+    }
+
+    @Transactional
+    private void buscarLibro() {
+        System.out.println("Ingrese una palabra clave para buscar el libro:");
+        String palabraClave = teclado.nextLine().trim().toLowerCase();
+
+        // Buscar en la base de datos usando LIKE
+        List<Libro> candidatos = libroRepository.findLibrosCandidatosPorTitulo(palabraClave);
+
+        // Filtrar por palabra completa
+        List<Libro> librosFiltrados = candidatos.stream()
+                .filter(libro -> contienePalabraCompleta(libro.getTitulo(), palabraClave))
+                .toList();
+
+        if (!librosFiltrados.isEmpty()) {
+            System.out.println("Libros encontrados en la base de datos:");
+            librosFiltrados.forEach(this::mostrarInformacionLibro);
+        } else {
+            System.out.println("No se encontró ningún libro en la base de datos. Buscando en la API...");
+
+            // Buscar en la API
+            Datos datosBusqueda = obtenerDatosLibros(URL_BASE + "?search=" + palabraClave.replace(" ", "+"));
+            Optional<DatosLibros> libroAPI = datosBusqueda.resultados().stream()
+                    .filter(libro -> contienePalabraCompleta(libro.titulo().toLowerCase(), palabraClave))
+                    .findFirst();
+
+            libroAPI.ifPresentOrElse(datosLibro -> {
+                System.out.println("\nLibro encontrado en la API:");
+                System.out.println("Título: " + datosLibro.titulo());
+                registrarLibroDesdeAPI(datosLibro);
+            }, () -> System.out.println("No se encontró ningún libro con esa palabra clave."));
+        }
+    }
+
+
+    private void registrarLibroDesdeAPI(DatosLibros datosLibro) {
+        Libro nuevoLibro = new Libro(datosLibro);
+        List<Autor> autores = datosLibro.autor().stream()
+                .map(datosAutor -> autorRepository.findByNombre(datosAutor.nombre().toLowerCase().trim())
+                        .orElseGet(() -> {
+                            Autor autor = new Autor(datosAutor.nombre().toLowerCase().trim(),
+                                    datosAutor.fechaDeNacimiento(),
+                                    datosAutor.fechaDeFallecimiento());
+                            autorRepository.save(autor);
+                            return autor;
+                        })).toList();
+
+        nuevoLibro.setAutores(autores);
+
+        if (!libroRepository.existsByTituloIgnoreCase(nuevoLibro.getTitulo())) {
+            try {
+                libroRepository.save(nuevoLibro);
+                System.out.println("El libro ha sido registrado exitosamente.");
+            } catch (DataIntegrityViolationException e) {
+                System.out.println("Error al intentar registrar el libro: " + nuevoLibro.getTitulo());
+            }
+        }
+    }
+
+    @Transactional
+    private void buscarAutoresRegistrados() {
+        System.out.println("Ingrese una palabra clave para buscar el autor:");
+        String palabraClave = teclado.nextLine().trim().toLowerCase();
+
+        // Buscar en la base de datos con LIKE
+        List<Autor> candidatos = autorRepository.findByNombreCandidato(palabraClave);
+
+        // Validar palabras completas dentro del nombre
+        List<Autor> autoresFiltrados = candidatos.stream()
+                .filter(autor -> contienePalabraCompletaEnNombre(autor.getNombre(), palabraClave))
+                .toList();
+
+        if (autoresFiltrados.isEmpty()) {
+            System.out.println("No se encontró ningún autor con esa palabra clave.");
+        } else {
+            System.out.println("Autores encontrados:");
+            autoresFiltrados.forEach(this::mostrarDatosAutor);
+        }
+    }
+
+
+    private boolean contienePalabraCompleta(String texto, String palabraClave) {
+        String[] palabras = texto.split("\\s+");
+        for (String palabra : palabras) {
+            if (palabra.equalsIgnoreCase(palabraClave)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean contienePalabraCompletaEnNombre(String nombreCompleto, String palabraClave) {
+        // Separar por espacios o comas para cubrir nombres completos como "Melville, Herman"
+        String[] palabras = nombreCompleto.split("[\\s,]+");
+        for (String palabra : palabras) {
+            if (palabra.equalsIgnoreCase(palabraClave)) {
+                return true;
+            }
+        }
+        return false;
     }
 
 
@@ -106,6 +188,30 @@ public class Principal {
         var json = consumoAPI.obtenerDatos(url);
         return conversor.obtenerDatos(json, Datos.class);
     }
+
+    private void mostrarInformacionLibro(Libro libro) {
+        System.out.println("\n****** Información del Libro ******");
+        System.out.println("Título: " + libro.getTitulo());
+        System.out.println("Idiomas: " + String.join(", ", libro.getIdiomas()));
+        System.out.println("Descargas: " + libro.getNumeroDeDescargas());
+        System.out.println("Autor(es): " + libro.getAutores().stream()
+                .map(Autor::getNombre)
+                .collect(Collectors.joining(", ")));
+        System.out.println("***********************************\n");
+    }
+
+    private void mostrarDatosAutor(Autor autor) {
+        Hibernate.initialize(autor.getBibliografias());
+        System.out.println("\nAutor encontrado:");
+        System.out.println("Nombre: " + autor.getNombre());
+        System.out.println("Fecha de Nacimiento: " + autor.getFechaDeNacimiento());
+        System.out.println("Fecha de Fallecimiento: " + autor.getFechaDeFallecimiento());
+        System.out.println("Libros: " + autor.getLibros().stream()
+                .map(Libro::getTitulo)
+                .collect(Collectors.joining(", ")));
+        System.out.println("*********************\n");
+    }
+
 
     private void mostrarTopLibros() {
         var datos = obtenerDatosLibros(URL_BASE);
@@ -120,77 +226,6 @@ public class Principal {
             System.out.printf("%d. %s\n", i + 1, libro.titulo().toUpperCase());
         }
     }
-
-    @Transactional
-    private void buscarLibro() {
-        System.out.println("Ingrese una palabra clave para buscar el libro:");
-        var palabraClave = teclado.nextLine();
-
-        // Buscar el libro en la base de datos solo por el título (ignorando mayúsculas/minúsculas)
-        var libroExistente = libroRepository.findFirstByTituloContainingIgnoreCase(palabraClave);
-
-        if (libroExistente.isPresent()) {
-            // Si el libro ya existe, mostrar información del libro
-            var libro = libroExistente.get();
-            System.out.println("\nEl libro ya está registrado en la base de datos.\n");
-            System.out.println("Título: " + libro.getTitulo());
-            System.out.println("Idiomas: " + String.join(", ", libro.getIdiomas()));
-            System.out.println("Descargas: " + libro.getNumeroDeDescargas());
-            System.out.println("Autores: " + libro.getAutores().stream()
-                    .map(Autor::getNombre)
-                    .collect(Collectors.joining(", ")));
-        } else {
-            // Si el libro no existe, buscarlo en la API
-            var datosBusqueda = obtenerDatosLibros(URL_BASE + "?search=" + palabraClave.replace(" ", "+"));
-
-            Optional<DatosLibros> libroBuscado = datosBusqueda.resultados().stream().findFirst();
-
-            libroBuscado.ifPresentOrElse(datosLibro -> {
-                System.out.println("\nLibro encontrado en la API: \n");
-                System.out.println("Título: " + datosLibro.titulo());
-                System.out.println("Idiomas: " + String.join(", ", datosLibro.idiomas()));
-                System.out.println("Descargas: " + datosLibro.numeroDeDescargas());
-                System.out.println("Autores: " + datosLibro.autor().stream()
-                        .map(DatosAutor::nombre)
-                        .collect(Collectors.joining(", ")));
-
-                // Crear un nuevo objeto Libro a partir de los datos obtenidos de la API
-                var nuevoLibro = new Libro(datosLibro);
-
-                // Buscar o crear los autores relacionados con el libro
-                var autores = datosLibro.autor().stream()
-                        .map(datosAutor -> autorRepository.findByNombre(datosAutor.nombre().toLowerCase().trim())
-                                .orElseGet(() -> {
-                                    var autor = new Autor(datosAutor.nombre().toLowerCase().trim(),
-                                            datosAutor.fechaDeNacimiento(),
-                                            datosAutor.fechaDeFallecimiento());
-                                    autorRepository.save(autor);
-                                    return autor;
-                                })).toList();
-
-                // Asignar los autores al libro
-                nuevoLibro.setAutores(autores);
-
-                // Verificar si el libro ya existe en la base de datos antes de intentar guardarlo
-                if (libroRepository.existsByTituloIgnoreCase(nuevoLibro.getTitulo())) {
-                    System.out.println("El libro ya existe en la base de datos: " + nuevoLibro.getTitulo());
-                } else {
-                    try {
-                        // Intentar guardar el libro en la base de datos
-                        libroRepository.save(nuevoLibro);
-                        System.out.println("El libro ha sido registrado exitosamente en la base de datos.");
-                    } catch (DataIntegrityViolationException e) {
-                        // En caso de que haya un error de integridad (aunque no debería llegar aquí por la verificación previa)
-                        System.out.println("Error al intentar registrar el libro. Puede que ya exista en la base de datos: " + nuevoLibro.getTitulo());
-                    }
-                }
-            }, () -> System.out.println("\nNo se encontró ningún libro con esa palabra clave en la API."));
-        }
-    }
-
-
-
-
 
     private void listarLibrosDisponibles() {
         var libros = libroRepository.findAll();
@@ -213,7 +248,6 @@ public class Principal {
         });
     }
 
-
     private void buscarLibroPorIdioma() {
         var idiomasDisponibles = libroRepository.findDistinctIdiomas();
 
@@ -234,7 +268,7 @@ public class Principal {
                 teclado.nextLine(); // Limpiar buffer
 
                 if (opcion < 1 || opcion > idiomasDisponibles.size()) {
-                    System.out.println("Opción inválida. Por favor, seleccione un número entre 1 y " + idiomasDisponibles.size() + ".");
+                    System.out.println("Opción inválida. Por favor, seleccione un número válido.");
                     continue;
                 }
 
@@ -248,7 +282,7 @@ public class Principal {
                     librosPorIdioma.forEach(libro -> System.out.println(" - " + libro.getTitulo()));
                 }
                 break;
-            } catch (InputMismatchException e) {
+            } catch (Exception e) {
                 System.out.println("Entrada no válida. Por favor, ingrese un número válido.");
                 teclado.nextLine(); // Limpiar buffer en caso de error
             }
@@ -256,68 +290,12 @@ public class Principal {
     }
 
 
-
-    @Transactional
-    private void buscarAutoresRegistrados() {
-        System.out.println("Ingrese una palabra clave para buscar el autor:");
-        var palabraClave = teclado.nextLine();
-
-        // Obtener todos los autores que coincidan con la palabra clave
-        List<Autor> autores = autorRepository.findByNombreWithLibros(palabraClave);
-
-        // Verificar si se encontraron autores
-        if (autores.isEmpty()) {
-            System.out.println("\nNo se encontró ningún autor con esa palabra clave.");
-            return;
-        }
-
-        // Si hay más de un autor, mostrar la lista y permitir que el usuario elija uno
-        if (autores.size() > 1) {
-            System.out.println("\nSe encontraron varios autores. Elija uno:");
-            for (int i = 0; i < autores.size(); i++) {
-                System.out.println((i + 1) + ". " + autores.get(i).getNombre());
-            }
-
-            // El usuario elige un autor
-            System.out.print("\nIngrese el número del autor: ");
-            int opcion = Integer.parseInt(teclado.nextLine()) - 1;
-
-            // Validar que la opción es válida
-            if (opcion >= 0 && opcion < autores.size()) {
-                var autorSeleccionado = autores.get(opcion);
-                mostrarDatosAutor(autorSeleccionado);
-            } else {
-                System.out.println("\nOpción no válida.");
-            }
-        } else {
-            // Si solo hay un autor, mostrar los datos directamente
-            var autor = autores.get(0);
-            mostrarDatosAutor(autor);
-        }
-    }
-
-    // Método para mostrar los detalles del autor
-    private void mostrarDatosAutor(Autor autor) {
-        Hibernate.initialize(autor.getBibliografias());
-        System.out.println("\nAutor encontrado:");
-        System.out.println("Nombre: " + autor.getNombre());
-        System.out.println("Fecha de Nacimiento: " + autor.getFechaDeNacimiento());
-        System.out.println("Fecha de Fallecimiento: " + autor.getFechaDeFallecimiento());
-        System.out.println("Libros: " + autor.getLibros().stream()
-                .map(Libro::getTitulo)
-                .collect(Collectors.joining(", ")));
-        System.out.println("*********************\n");
-    }
-
-
-
-
     @Transactional
     private void buscarLibroPorAutorYFecha() {
         System.out.println("Ingrese el año para filtrar autores:");
         try {
             int anoSeleccionado = teclado.nextInt();
-            teclado.nextLine(); // Limpiar buffer
+            teclado.nextLine();
 
             var autoresVivos = autorRepository.findAutoresVivosEnAno(anoSeleccionado);
 
@@ -329,9 +307,7 @@ public class Principal {
             System.out.println("Autores vivos en el año " + anoSeleccionado + ":");
             for (int i = 0; i < autoresVivos.size(); i++) {
                 var autor = autoresVivos.get(i);
-                System.out.printf("%d - %s (Nacimiento: %d, Fallecimiento: %s)\n", i + 1, autor.getNombre(),
-                        autor.getFechaDeNacimiento(),
-                        autor.getFechaDeFallecimiento() == null ? "N/A" : autor.getFechaDeFallecimiento());
+                System.out.printf("%d - %s\n", i + 1, autor.getNombre());
             }
 
             System.out.println("Seleccione un autor (ingrese el número correspondiente):");
@@ -344,20 +320,10 @@ public class Principal {
             }
 
             var autorSeleccionado = autoresVivos.get(opcion - 1);
-            var libros = autorSeleccionado.getLibros();
-
-            if (libros.isEmpty()) {
-                System.out.println("El autor seleccionado no tiene libros registrados.");
-            } else {
-                System.out.println("Libros del autor " + autorSeleccionado.getNombre() + ":");
-                libros.forEach(libro -> System.out.println(" - " + libro.getTitulo()));
-            }
-        } catch (InputMismatchException e) {
-            System.out.println("Entrada no válida. Por favor, ingrese un número para el año.");
+            mostrarDatosAutor(autorSeleccionado);
+        } catch (Exception e) {
+            System.out.println("Entrada no válida. Por favor, ingrese un número válido.");
             teclado.nextLine(); // Limpiar buffer
         }
     }
-
-
-
 }

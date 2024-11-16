@@ -13,7 +13,7 @@ public class Libro {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(unique = true, nullable = false)
+    @Column(unique = true, nullable = false, length = 1024)
     private String titulo;
 
     @ElementCollection(fetch = FetchType.EAGER)

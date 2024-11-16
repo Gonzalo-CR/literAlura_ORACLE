@@ -9,12 +9,30 @@ import java.util.Optional;
 
 public interface LibroRepository extends JpaRepository<Libro, Long> {
 
-    // Método para buscar libros por título (ignorando mayúsculas y minúsculas)
-    Optional<Libro> findFirstByTituloContainingIgnoreCase(String palabra);
+//    // Buscar el primer libro que coincida exactamente con el título, ignorando mayúsculas/minúsculas
+//    Optional<Libro> findFirstByTituloIgnoreCase(String titulo);
+//
+//    // Método para buscar libros por título (ignorando mayúsculas y minúsculas)
+//    Optional<Libro> findFirstByTituloContainingIgnoreCase(String palabra);
+//
+//    // Método para buscar libros que contengan una palabra completa en el título, ignorando mayúsculas y minúsculas
+//    @Query(value = "SELECT * FROM libro WHERE LOWER(titulo) REGEXP CONCAT('(^|\\s)', LOWER(:palabra), '(\\s|$)')", nativeQuery = true)
+//    List<Libro> findLibrosPorPalabraCompletaEnTitulo(String palabra);
 
+
+
+    @Query("SELECT l FROM Libro l WHERE LOWER(l.titulo) LIKE LOWER(CONCAT('%', :palabra, '%'))")
+    List<Libro> findLibrosCandidatosPorTitulo(String palabra);
+
+
+
+    //*********************************
+
+    // Mantener los idiomas únicos
     @Query("SELECT DISTINCT i FROM Libro l JOIN l.idiomas i")
     List<String> findDistinctIdiomas();
 
+    // Libros por idioma
     @Query("""
     SELECT l FROM Libro l 
     JOIN l.idiomas i 
@@ -22,6 +40,6 @@ public interface LibroRepository extends JpaRepository<Libro, Long> {
     """)
     List<Libro> findLibrosPorIdioma(String idioma);
 
-    // Método adicional para verificar si un libro con un título específico ya existe (ignorando mayúsculas y minúsculas)
+    // Verificar si un libro existe con un título específico
     boolean existsByTituloIgnoreCase(String titulo);
 }
